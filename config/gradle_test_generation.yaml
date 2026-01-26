@@ -1,0 +1,115 @@
+# Configuration for generating Gradle Test Kit tests that verify build script changes
+# This config is designed to work with SWE-bench instances containing gradle configuration updates
+agent:
+  type: default
+  templates:
+    system_template: |-
+      You are an expert in Gradle build systems and test generation. Your task is to generate Gradle Test Kit tests that verify build script changes.
+    instance_template: |-
+      <uploaded_files>
+      {{working_dir}}
+      </uploaded_files>
+      I've uploaded a code repository in the directory {{working_dir}} with a gradle configuration change.
+
+      ## Context
+
+      We have two versions of a build script:
+      - **Original (O)**: The broken/incorrect version
+      - **Modified (M)**: The fixed/correct version (gold patch)
+
+      ## Task Description
+      
+      <pr_description>
+      {{problem_statement}}
+      </pr_description>
+
+      ## Your Goal
+
+      Generate a Java test class using Gradle Test Kit that:
+      1. **FAILS when run against the Original (O) build script**
+      2. **PASSES when run against the Modified (M) build script**
+
+      The test should verify the specific functional change, not just "builds successfully".
+
+      ## Guidelines
+
+      1. **Be Specific**: Test the exact change (dependency version, task existence, configuration value, etc.)
+      2. **Use Gradle Test Kit APIs**:
+         - `GradleRunner.create()` to run builds
+         - `.withProjectDir()` to set the project directory
+         - `.withArguments()` to specify Gradle tasks/flags
+         - `.build()` or `.buildAndFail()` for expected outcomes
+      3. **Inspect Outputs**: Use `result.getOutput()` to verify specific content
+      4. **Test Task Outcomes**: Use `result.task(":taskName").getOutcome()` when appropriate
+      5. **Handle Dependencies**: Use `dependencies` task to verify dependency versions
+      6. **Check Configurations**: Verify plugin applications, task configurations, etc.
+
+      ## Critical Constraints - DO NOT VIOLATE:
+
+      **FORBIDDEN ACTIONS** - Your test must NOT include any of the following:
+      - ❌ DO NOT create source directories (src/main/java, src/test/java, etc.)
+      - ❌ DO NOT create AndroidManifest.xml or any Android-specific files
+      - ❌ DO NOT create gradle.properties files
+      - ❌ DO NOT create additional configuration files beyond settings.gradle.kts
+      - ❌ DO NOT create any source code files (.java, .kt, etc.)
+      - ❌ DO NOT set up project-specific directory structures
+      - ❌ DO NOT add environment-specific setup
+
+      **REQUIRED MINIMAL SETUP** - Your test must ONLY:
+      - ✅ Create settings.gradle.kts with minimal content (rootProject.name only)
+      - ✅ Copy the build file from system property to temp directory
+      - ✅ Run GradleRunner with appropriate arguments
+      - ✅ Assert on the build output or build file content
+
+      The test framework and runner handle all environment setup. Your test should focus ONLY on verifying the specific build script change.
+
+      ## Required Test Structure:
+
+      1. **Class name**: `BuildScriptTest` (exactly this name)
+      2. **Imports**: Include all necessary imports for Gradle Test Kit and JUnit 5
+      3. **@TempDir**: Use JUnit 5's `@TempDir Path tempDir` for temporary directory
+      4. **Build file loading**: Read build file path from system property `sample.buildFile`
+      5. **Project setup** (MINIMAL ONLY): 
+         - Create `settings.gradle.kts` with ONLY: `rootProject.name = "test-project"\n`
+         - Copy the build file from system property to temp directory
+         - NOTHING ELSE - no other files, directories, or configurations
+      6. **Test execution**: Run GradleRunner with appropriate arguments
+      7. **Assertions**: Make specific assertions about the output with meaningful messages
+
+      ## Steps to Complete:
+
+      1. **Analyze the gold patch**: First, examine the diff to understand what changed in the gradle configuration
+      2. **Identify the verification strategy**: Determine what specific aspect to test (dependency version, plugin, task, etc.)
+      3. **Create the test file**: Generate a Java test class named `BuildScriptTest.java` in the appropriate test directory
+      4. **Follow the template structure**: Use the minimal setup pattern described above
+      5. **Verify the test**: Ensure your test logic would fail on the original and pass on the modified build script
+      6. **Submit**: When complete, use the submit command to finalize your test patch
+
+      Your thinking should be thorough and so it's fine if it's very long. Make sure the test is deterministic and reliable.
+    next_step_template: |-
+      OBSERVATION:
+      {{observation}}
+    next_step_no_output_template: |-
+      Your command ran successfully and did not produce any output.
+  tools:
+    execution_timeout: 300
+    env_variables:
+      PAGER: cat
+      MANPAGER: cat
+      LESS: -R
+      PIP_PROGRESS_BAR: 'off'
+      TQDM_DISABLE: '1'
+      GIT_PAGER: cat
+    bundles:
+      - path: tools/registry
+      - path: tools/edit_anthropic
+      - path: tools/search
+      - path: tools/submit
+    registry_variables:
+      USE_FILEMAP: 'true'
+    enable_bash_tool: true
+    parse_function:
+      type: function_calling
+  history_processors:
+    - type: cache_control
+      last_n_messages: 2
