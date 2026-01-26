@@ -78,7 +78,7 @@ class GenericAPIModelConfig(PydanticBaseModel):
     per_instance_call_limit: int = Field(default=0, description="Per instance call limit.")
     temperature: float = 0.0
     """Sampling temperature"""
-    top_p: float | None = 1.0
+    top_p: float | None = None
     """Sampling top-p"""
     api_base: str | None = None
     api_version: str | None = None
@@ -702,9 +702,13 @@ class LiteLLMModel(AbstractModel):
             msg = f"Input tokens {input_tokens} exceed max tokens {self.model_max_input_tokens}"
             raise ContextWindowExceededError(msg)
         extra_args = {}
-        if self.config.api_base:
+        api_base = os.getenv("LITE_LLM_URL")
+        if api_base:
             # Not assigned a default value in litellm, so only pass this if it's set
-            extra_args["api_base"] = self.config.api_base
+            extra_args["api_base"] = api_base
+
+        api_key = os.getenv("LITELLM_API_KEY")
+
         if self.tools.use_function_calling:
             extra_args["tools"] = self.tools.tools
         # We need to always set max_tokens for anthropic models
@@ -718,7 +722,7 @@ class LiteLLMModel(AbstractModel):
                 temperature=self.config.temperature if temperature is None else temperature,
                 top_p=self.config.top_p,
                 api_version=self.config.api_version,
-                api_key=self.config.choose_api_key(),
+                api_key=api_key,
                 fallbacks=self.config.fallbacks,
                 **completion_kwargs,
                 **extra_args,

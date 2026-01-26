@@ -90,7 +90,7 @@ class SimpleBatchInstance(BaseModel):
     present in the docker container.
     """
 
-    image_name: str
+    image_name: str = ""
     problem_statement: str
     instance_id: str
     repo_name: str = ""
@@ -146,7 +146,12 @@ class SimpleBatchInstance(BaseModel):
                 env=EnvironmentConfig(deployment=deployment, repo=repo), problem_statement=problem_statement
             )
 
-        deployment.image = self.image_name  # type: ignore
+        if self.image_name:
+            deployment.image = self.image_name  # type: ignore
+        elif hasattr(deployment, "image") and not deployment.image:
+            # If image_name is not set, we try to construct it from instance_id (SWE-bench style)
+            # Docker doesn't allow double underscore, so we replace them with a magic token
+            deployment.image = f"sweb.eval.x86_64.{self.instance_id}:latest".lower()
 
         if isinstance(deployment, DockerDeploymentConfig) and deployment.python_standalone_dir is None:
             # Note: you can disable this by setting python_standalone_dir to ""
