@@ -41,6 +41,10 @@ class EnvironmentConfig(BaseModel):
     """Timeout for the post-startup commands.
     NOTE: The timeout applies to every command in `post_startup_commands` separately.
     """
+    patch: str | None = None
+    """Optional patch to apply after checking out the base commit."""
+    problem_statement: str | None = None
+    """Problem statement text from the task instance."""
 
     # pydantic config
     model_config = ConfigDict(extra="forbid")
@@ -50,14 +54,16 @@ class EnvironmentConfig(BaseModel):
 
 class SWEEnv:
     def __init__(
-        self,
-        *,
-        deployment: AbstractDeployment,
-        repo: Repo | RepoConfig | None,
-        post_startup_commands: list[str],
-        post_startup_command_timeout: int = 500,
-        hooks: list[EnvHook] | None = None,
-        name: str = "main",
+            self,
+            *,
+            deployment: AbstractDeployment,
+            repo: Repo | RepoConfig | None,
+            post_startup_commands: list[str],
+            post_startup_command_timeout: int = 500,
+            hooks: list[EnvHook] | None = None,
+            name: str = "main",
+            patch: str | None = None,
+            problem_statement: str | None = None,
     ):
         """This class represents the environment in which we solve the tasks.
 
@@ -68,6 +74,8 @@ class SWEEnv:
             hooks: Environment hooks (used to inject custom functionality)
                 Equivalent to calling `add_hook` for each hook after initialization.
             name: Name of the environment
+            patch: Optional patch to apply after checking out the base commit
+            problem_statement: Problem statement text from the task instance
         """
         super().__init__()
         self.deployment = deployment
@@ -76,6 +84,8 @@ class SWEEnv:
         self.post_startup_command_timeout = post_startup_command_timeout
         self.logger = get_logger("swea-env", emoji="🪴")
         self.name = name
+        self.patch = patch
+        self.problem_statement = problem_statement
         self.clean_multi_line_functions = lambda x: x
         self._chook = CombinedEnvHooks()
         for hook in hooks or []:
@@ -95,6 +105,8 @@ class SWEEnv:
             post_startup_commands=config.post_startup_commands,
             post_startup_command_timeout=config.post_startup_command_timeout,
             name=config.name,
+            patch=config.patch,
+            problem_statement=config.problem_statement,
         )
 
     def add_hook(self, hook: EnvHook) -> None:
@@ -165,6 +177,47 @@ class SWEEnv:
                 timeout=120,
             )
 
+            # Apply patch if provided
+            if self.patch:
+                self.logger.info("Applying patch to repository %s", self.repo.repo_name)
+                try:
+                    # Write patch to a temporary file
+                    patch_file = f"/{self.repo.repo_name}/.swe_agent_patch.diff"
+                    self.write_file(patch_file, self.patch)
+
+                    # Apply the patch
+                    apply_patch_cmd = f"cd /{self.repo.repo_name} && git apply {patch_file}"
+                    self.communicate(
+                        input=apply_patch_cmd,
+                        check="raise",
+                        error_msg="Failed to apply patch",
+                        timeout=60,
+                    )
+
+                    # Clean up the patch file
+                    cleanup_cmd = f"rm {patch_file}"
+                    self.communicate(input=cleanup_cmd, check="warn", timeout=10)
+
+                    cat_patch = (f" git config --global user.email \"satoru.gojo@gmail.com\" && "
+                                 f"git config --global user.name \"Satoru Gojo\" && "
+                                 f"git add . && "
+                                 f"git commit -m '{self.problem_statement}'")
+                    self.communicate(
+                        input=cat_patch,
+                        check="raise",
+                        error_msg="Failed to commit the gold patch",
+                        timeout=60,
+                    )
+
+                    self.logger.info("Patch applied successfully")
+                except Exception as e:
+                    self.logger.error(f"Failed to apply patch: {e}")
+                    raise
+            else:
+                self.logger.info("Patch not found")
+        else:
+            self.logger.info("Repo is empty")
+
     def close(self) -> None:
         """Shutdown SWE-ReX deployment etc."""
         self.logger.info("Beginning environment shutdown...")
@@ -174,7 +227,7 @@ class SWEEnv:
     # MARK: Helper functions #
 
     def _init_deployment(
-        self,
+            self,
     ) -> None:
         """Handles container initialization. Defines container name and creates it.
         If cached_image is provided, it will use that image name instead of the default.
@@ -195,12 +248,12 @@ class SWEEnv:
 
     # todo: return exit code?
     def communicate(
-        self,
-        input: str,
-        timeout: int | float = 25,
-        *,
-        check: Literal["warn", "ignore", "raise"] = "ignore",
-        error_msg: str = "Command failed",
+            self,
+            input: str,
+            timeout: int | float = 25,
+            *,
+            check: Literal["warn", "ignore", "raise"] = "ignore",
+            error_msg: str = "Command failed",
     ) -> str:
         """Executes a command in the running shell. The details of this are handled by
         the SWE-ReX deployment/runtime.
@@ -263,12 +316,12 @@ class SWEEnv:
         self.communicate(command, check="raise")
 
     def execute_command(
-        self,
-        command: str,
-        shell: bool = True,
-        check: bool = False,
-        env: dict[str, str] | None = None,
-        cwd: str | None = None,
+            self,
+            command: str,
+            shell: bool = True,
+            check: bool = False,
+            env: dict[str, str] | None = None,
+            cwd: str | None = None,
     ) -> None:
         """Execute a command in the environment independent of the session (i.e., as a subprocess)"""
         asyncio.run(

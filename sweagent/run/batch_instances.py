@@ -101,6 +101,8 @@ class SimpleBatchInstance(BaseModel):
     """
     base_commit: str = "HEAD"
     """Used to reset repo."""
+    patch: str | None = None
+    """Optional patch to apply after checking out the base commit."""
     extra_fields: dict[str, Any] = Field(default_factory=dict)
     """Any additional data to be added to the instance.
     This data will be available when formatting prompt templates.
@@ -139,11 +141,11 @@ class SimpleBatchInstance(BaseModel):
                 msg = "Local deployment does not support image_name"
                 raise ValueError(msg)
             return BatchInstance(
-                env=EnvironmentConfig(deployment=deployment, repo=repo), problem_statement=problem_statement
+                env=EnvironmentConfig(deployment=deployment, repo=repo, patch=self.patch, problem_statement=self.problem_statement), problem_statement=problem_statement
             )
         if isinstance(deployment, DummyDeploymentConfig):
             return BatchInstance(
-                env=EnvironmentConfig(deployment=deployment, repo=repo), problem_statement=problem_statement
+                env=EnvironmentConfig(deployment=deployment, repo=repo, patch=self.patch, problem_statement=self.problem_statement), problem_statement=problem_statement
             )
 
         if self.image_name:
@@ -158,7 +160,7 @@ class SimpleBatchInstance(BaseModel):
             deployment.python_standalone_dir = "/root"  # type: ignore
 
         return BatchInstance(
-            env=EnvironmentConfig(deployment=deployment, repo=repo), problem_statement=problem_statement
+            env=EnvironmentConfig(deployment=deployment, repo=repo, patch=self.patch, problem_statement=self.problem_statement), problem_statement=problem_statement
         )
 
     @model_validator(mode="before")
