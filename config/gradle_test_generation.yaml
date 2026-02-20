@@ -136,7 +136,7 @@ agent:
          Replace `"path/to/target/build.gradle.kts"` with the actual path to the build file that was modified.
       6. **Create the test file**: Write `BuildScriptTest.java` in `/src/test/java/`
       7. **Verify your logic**: Ensure the test PASSES with the current changes
-      8. **Test your solution**: Run `./gradlew :clean :test --tests BuildScriptTest` to verify the test executes correctly
+      8. **Test your solution**: Run `./gradlew :clean :test --tests BuildScriptTest` to verify the test executes correctly.
       9. **Submit**: Use the submit command to finalize
 
       ## Example Analysis
@@ -188,6 +188,7 @@ agent:
           <diff>
           {{diff}}
           </diff>
+    execution_timeout: 300
     enable_bash_tool: true
     parse_function:
       type: function_calling
