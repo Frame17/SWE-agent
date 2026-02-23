@@ -77,15 +77,9 @@ def preprocess_dataset(json_path='gradle_prs_swe_bench_trimmed.json'):
     
     print(f"✓ Updated JSON saved to: {json_path}")
     print(f"\n{len(instances)} instances preprocessed successfully!")
-    print("\nYou can now run:")
-    print("  python -m sweagent.run.run_batch \\")
-    print("    --config config/gradle_test_generation.yaml \\")
-    print("    --instances.type file \\")
-    print(f"    --instances.path {json_path.name} \\")
-    print("    --agent.model.name claude-sonnet-4-5")
 
 
 if __name__ == '__main__':
     # Get JSON file path from command line argument or use default
-    json_file = sys.argv[1] if len(sys.argv) > 1 else 'gradle_prs_swe_bench_trimmed.json'
+    json_file = sys.argv[1] if len(sys.argv) > 1 else 'gradle_prs_swe_bench_with_tests.json'
     preprocess_dataset(json_file)
