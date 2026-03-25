@@ -59,23 +59,11 @@ def preprocess_dataset(json_path='gradle_prs_swe_bench_trimmed.json'):
         
         print(f"  [{i:2d}] {instance_id:50s} → {image_name}")
     
-    # Backup original file
-    backup_path = str(json_path) + '.backup'
-    if Path(backup_path).exists():
-        print(f"\nWarning: Backup file already exists: {backup_path}")
-        response = input("Overwrite backup? (y/n): ")
-        if response.lower() != 'y':
-            print("Aborted.")
-            sys.exit(0)
-    
-    json_path.rename(backup_path)
-    print(f"\n✓ Backup saved to: {backup_path}")
-    
-    # Save updated JSON
+    # Save updated JSON in-place
     with open(json_path, 'w') as f:
         json.dump(instances, f, indent=2)
     
-    print(f"✓ Updated JSON saved to: {json_path}")
+    print(f"\n✓ Updated JSON saved to: {json_path}")
     print(f"\n{len(instances)} instances preprocessed successfully!")
 
 
