@@ -1,38 +1,79 @@
 # Gradle Bench
 
-This directory contains scripts for preparing the Gradle SWE-bench dataset.
+Scripts for building a Gradle SWE-bench dataset enriched with model-generated test patches.
 
-## Test Generation Workflow
+## Overview
 
-1. Start with a raw dataset for which Docker images have been built.
-2. Run the preprocessing script to prepare the dataset for the agent:
-   ```bash
-   python gradle-bench/preprocess_dataset.py [json_file]
-   ```
-3. Run the agent to generate tests:
-   ```bash
-   bash test_swe_bench.sh
-   ```
-4. Merge the generated test patches back into the dataset:
-   ```bash
-   python gradle-bench/populate_test_patches.py
-   ```
+The pipeline takes a raw Gradle dataset and produces a refined dataset where every entry contains a model-generated test patch. It consists of three stages:
 
-## Scripts
+1. **Prepare** — enrich the raw dataset so the agent can run against it.
+2. **Generate** — run the SWE-agent to produce test patches for each issue.
+3. **Collect** — merge the generated patches back into the dataset, keeping only entries for which a patch was produced.
 
-### `preprocess_dataset.py`
-
-Prepares a raw dataset file for use with SWE-agent by enriching each entry with metadata required by the agent. Backs up the original file before making changes.
+Run the full pipeline with:
 
 ```bash
-python preprocess_dataset.py [json_file]
+python run_pipeline.py [json_file] [model_name]
 ```
 
-### `populate_test_patches.py`
+- `json_file` — dataset filename inside `data/` (default: `gradle_dataset_verified.json`)
+- `model_name` — LLM model to use for test generation (default: `claude-sonnet-4-6`)
 
-Takes model-generated test patches produced by a SWE-agent run and merges them into the dataset. 
-Produces a new dataset file that contains the entries for which a test patch was generated.
+Example:
 
 ```bash
-python populate_test_patches.py
+python run_pipeline.py gradle_dataset_verified_sample.json claude-opus-4-6
+```
+
+---
+
+## Pipeline Stages
+
+### 1. Prepare — `preprocess_dataset.py`
+
+**Input:** a raw JSON dataset (list of SWE-bench instances) in `data/`.  
+**Output:** the same file updated in-place.
+
+Adds two fields that SWE-agent requires but are absent from the raw export:
+
+| Field | Value |
+|---|---|
+| `image_name` | Docker image tag derived from `instance_id` |
+| `repo_name` | Fixed to `testbed` (the in-container checkout path) |
+
+Also ensures every `patch` value ends with a newline, as required by the patch-apply tooling.
+
+---
+
+### 2. Generate — `agent_generate_tests.sh`
+
+**Input:** the preprocessed dataset produced in stage 1.  
+**Output:** a `preds.json` file written to the trajectory directory under `trajectories/`.
+
+Runs `sweagent.run.run_batch` using the `gradle_test_generation` config. The agent is given each issue and asked to write a test that reproduces it. Results (one patch file per instance) are accumulated in a trajectory directory and summarised in `preds.json`.
+
+---
+
+### 3. Collect — `populate_test_patches.py`
+
+**Input:** the preprocessed dataset and the `preds.json` from stage 2.  
+**Output:** a new JSON file (`data/<stem>_with_test_patch.json`) containing only the instances for which the agent produced a non-empty test patch.
+
+Reads the agent predictions, copies the `model_patch` value into the `test_patch` field of each matching dataset entry, and writes the filtered result to the output file. The `preds.json` is resolved automatically from `trajectories/` by matching the dataset filename stem; the most recently modified match is used.
+
+---
+
+## Running Individual Stages
+
+Each stage can also be run independently from the project root:
+
+```bash
+# Stage 1
+python gradle-bench/preprocess_dataset.py data/gradle_dataset_verified.json
+
+# Stage 2 — args: [model_name] [dataset_file]
+bash gradle-bench/agent_generate_tests.sh claude-sonnet-4-6 gradle-bench/data/gradle_dataset_verified.json
+
+# Stage 3
+python gradle-bench/populate_test_patches.py data/gradle_dataset_verified.json
 ```
