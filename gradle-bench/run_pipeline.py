@@ -96,9 +96,11 @@ def run_generate(
 ) -> None:
     """Run agent_generate_tests.sh for a single arch group."""
     dataset_rel = str(dataset_path.relative_to(project_root))
+    env = {**subprocess.os.environ, "PYTHON": sys.executable}
     result = subprocess.run(
         ["bash", "gradle-bench/agent_generate_tests.sh", model_name, dataset_rel, platform],
         cwd=project_root,
+        env=env,
     )
     # Don't exit on failure -- SWE-agent writes partial results for instances that succeeded
     if result.returncode != 0:

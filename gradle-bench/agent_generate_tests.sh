@@ -8,7 +8,7 @@ case "$MODEL_NAME" in
   *)        CONFIG="config/gradle_test_generation.yaml" ;;
 esac
 
-python -m sweagent.run.run_batch \
+${PYTHON:-python3} -m sweagent.run.run_batch \
   --config "$CONFIG" \
   --instances.type file \
   --instances.path "$DATASET_FILE" \
