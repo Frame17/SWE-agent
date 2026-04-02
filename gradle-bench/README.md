@@ -43,7 +43,7 @@ Adds two fields that SWE-agent requires but are absent from the raw export:
 
 Also ensures every `patch` value ends with a newline, as required by the patch-apply tooling.
 
-The `image_name` uses a literal `{arch}` placeholder (e.g. `sweb.eval.{arch}.aliucord__aliucord-556:latest`) so the dataset remains portable across architectures. The placeholder is resolved to the current machine architecture (`arm64`, `x86_64`, etc.) at runtime — either by `run_pipeline.py` (step 1b) or by `agent_generate_tests.sh` when run standalone.
+The `image_name` uses a literal `{arch}` placeholder (e.g. `sweb.eval.{arch}.aliucord__aliucord-556:latest`) so the dataset remains portable across architectures. The placeholder is resolved at runtime by probing Docker for the actual image — the host architecture is tried first, then the alternative (`x86_64` on ARM hosts, `arm64` on x86 hosts). This handles repos that force a specific architecture (e.g. projects using older Kotlin/Native versions that only ship x86_64 binaries).
 
 ---
 
@@ -52,7 +52,7 @@ The `image_name` uses a literal `{arch}` placeholder (e.g. `sweb.eval.{arch}.ali
 **Input:** the preprocessed dataset produced in stage 1.
 **Output:** a `preds.json` file written to the trajectory directory under `trajectories/`.
 
-Before launching the agent, resolves any `{arch}` placeholders in `image_name` fields to the current machine architecture (via `uname -m`).
+Before launching the agent, resolves any `{arch}` placeholders in `image_name` fields by probing Docker for the locally available image.
 
 Runs `sweagent.run.run_batch` using the `gradle_test_generation` config. The agent is given each issue and asked to write a test that reproduces it. Results (one patch file per instance) are accumulated in a trajectory directory and summarised in `preds.json`.
 

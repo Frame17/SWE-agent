@@ -25,17 +25,41 @@ def run(cmd: list[str], cwd: Path) -> None:
         sys.exit(result.returncode)
 
 
+def _docker_image_exists(image: str) -> bool:
+    return (
+        subprocess.run(
+            ["docker", "inspect", image],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode
+        == 0
+    )
+
+
 def resolve_arch(json_path: Path) -> None:
-    """Replace {arch} placeholders in image_name with the current machine architecture."""
-    arch = platform.machine()
+    """Replace {arch} placeholders by probing Docker for the actual image architecture."""
+    host_arch = platform.machine()
+    # Normalize: Linux ARM reports "aarch64" but Docker image tags use "arm64"
+    if host_arch == "aarch64":
+        host_arch = "arm64"
+    candidates = [host_arch, "x86_64"] if host_arch != "x86_64" else [host_arch, "arm64"]
+
     with open(json_path) as f:
         instances = json.load(f)
     for instance in instances:
-        if "image_name" in instance:
-            instance["image_name"] = instance["image_name"].replace("{arch}", arch)
+        if "{arch}" not in instance.get("image_name", ""):
+            continue
+        for arch in candidates:
+            candidate = instance["image_name"].replace("{arch}", arch)
+            if _docker_image_exists(candidate):
+                instance["image_name"] = candidate
+                print(f"  {instance['instance_id']:50s} → {arch}")
+                break
+        else:
+            instance["image_name"] = instance["image_name"].replace("{arch}", host_arch)
+            print(f"  {instance['instance_id']:50s} → {host_arch} (no image found)")
     with open(json_path, "w") as f:
         json.dump(instances, f, indent=2)
-    print(f"Resolved image architecture to '{arch}' for {len(instances)} instances")
 
 
 def main() -> None:
