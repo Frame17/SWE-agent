@@ -12,6 +12,8 @@ If no file is specified, defaults to 'data/gradle_dataset_verified.json'.
 If no model is specified, defaults to 'claude-sonnet-4-6'.
 """
 
+import json
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +23,19 @@ def run(cmd: list[str], cwd: Path) -> None:
     result = subprocess.run(cmd, cwd=cwd)
     if result.returncode != 0:
         sys.exit(result.returncode)
+
+
+def resolve_arch(json_path: Path) -> None:
+    """Replace {arch} placeholders in image_name with the current machine architecture."""
+    arch = platform.machine()
+    with open(json_path) as f:
+        instances = json.load(f)
+    for instance in instances:
+        if "image_name" in instance:
+            instance["image_name"] = instance["image_name"].replace("{arch}", arch)
+    with open(json_path, "w") as f:
+        json.dump(instances, f, indent=2)
+    print(f"Resolved image architecture to '{arch}' for {len(instances)} instances")
 
 
 def main() -> None:
@@ -35,6 +50,9 @@ def main() -> None:
         [sys.executable, "preprocess_dataset.py", dataset_file],
         cwd=script_dir,
     )
+
+    print("\n=== Step 1b: Resolving image architecture ===")
+    resolve_arch(script_dir / dataset_file)
 
     print("\n=== Step 2: Generating test patches with SWE-agent ===")
     run(
