@@ -188,7 +188,7 @@ agent:
           <diff>
           {{diff}}
           </diff>
-    execution_timeout: 300
+    execution_timeout: 600
     enable_bash_tool: true
     parse_function:
       type: function_calling
