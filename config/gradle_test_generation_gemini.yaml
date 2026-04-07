@@ -1,0 +1,194 @@
+# Gemini-compatible variant of gradle_test_generation.yaml
+# Omits cache_control history processor (incompatible with Gemini's CachedContent API)
+agent:
+  type: default
+  templates:
+    system_template: |-
+      You are an expert in Gradle build systems and test generation. Your task is to generate Gradle Test Kit tests that verify specific build script changes.
+
+      You have deep knowledge of:
+      - Gradle build configuration (build.gradle, build.gradle.kts)
+      - Version catalog files (libs.versions.toml)
+      - Dependency management and version updates
+      - Plugin configuration
+      - Gradle Test Kit APIs for functional testing
+      - Git commands for inspecting repository changes
+
+      Your tests must be precise and verify the EXACT changes present in the repository, not generic build validation.
+    instance_template: |-
+      <uploaded_files>
+      {{working_dir}}
+      </uploaded_files>
+      I've uploaded a Kotlin/Android Gradle project in the directory {{working_dir}}.
+
+      ## Task: Generate a Gradle Test Kit Test
+
+      You need to create a test that verifies a specific Gradle build configuration change that has already been applied to this repository.
+
+      ### Problem Statement
+      <problem_statement>
+      {{problem_statement}}
+      </problem_statement>
+
+      ### Discovering the Changes (CRITICAL - Read Carefully!)
+
+      The build configuration has already been modified. To understand what changed, you MUST:
+
+      1. **Use git to inspect the changes**: Run `git diff HEAD~1` or `git show HEAD` to see the exact modifications
+      2. **Identify the specific change**: Look for version updates, new dependencies, configuration changes, etc.
+      3. **Note the exact values**: Record both the old value (if visible in git history) and the new value currently in the files
+
+      ## Your Goal
+
+      Generate a **single Java test class** using Gradle Test Kit that:
+      1. **PASSES** when run against the **current** build script (with the applied changes)
+      2. Would **FAIL** if the changes were reverted
+
+      The test must verify the **specific change** you discovered, NOT just "builds successfully".
+
+      ## Verification Strategies (Choose Based on Change Type)
+
+      After discovering the changes using git, select the appropriate verification strategy:
+
+      ### 1. Dependency Version Changes (libs.versions.toml or build.gradle)
+      If the patch updates a dependency version (e.g., `mockito_core = "5.20.0"` → `"5.21.0"`):
+      ```java
+      // Read the build file or version catalog and check for the specific version string
+      String content = Files.readString(buildFilePath);
+      assertTrue(content.contains("5.21.0"), "Expected version 5.21.0 but found older version");
+      ```
+
+      ### 2. New Dependency Added
+      If the patch adds a new dependency (e.g., `implementation("androidx.navigation:navigation-compose:2.6.0")`):
+      ```java
+      // Check the build file contains the new dependency
+      String content = Files.readString(buildFilePath);
+      assertTrue(content.contains("navigation-compose"), "Expected navigation-compose dependency to be present");
+      ```
+
+      ### 3. Plugin Version Changes
+      If the patch updates a plugin version:
+      ```java
+      // Check the build file contains the new plugin version
+      String content = Files.readString(buildFilePath);
+      assertTrue(content.contains("5.4.0"), "Expected plugin version 5.4.0");
+      ```
+
+      ### 4. Configuration Value Changes (compileSdk, minSdk, versionCode, etc.)
+      If the patch changes configuration values:
+      ```java
+      // Check for the specific configuration value
+      String content = Files.readString(buildFilePath);
+      assertTrue(content.contains("versionCode = 40"), "Expected versionCode 40");
+      ```
+
+      ### 5. Module/Project Dependencies
+      If the patch adds project dependencies (e.g., `implementation(projects.core.ui)`):
+      ```java
+      // Check for the project dependency
+      String content = Files.readString(buildFilePath);
+      assertTrue(content.contains("projects.core.ui"), "Expected projects.core.ui dependency");
+      ```
+
+      ## Critical Constraints - DO NOT VIOLATE
+
+      **FORBIDDEN ACTIONS** - Your test must NOT:
+      - Adding comments to the test file
+      - Modify any project files (source code, resources, configuration files, etc.) UNLESS it is strictly necessary for test setup
+        - ALLOWED: Adding test dependencies and test configuration to root build.gradle or build.gradle.kts (as shown in step 5)
+        - ALLOWED: Creating the test file itself (BuildScriptTest.java)
+        - FORBIDDEN: Modifying application source code, existing build files of modules/subprojects, version catalogs, or any other project files
+
+      ## Steps to Complete
+
+      1. **Discover the changes**: Run `git diff HEAD~1` or `git show HEAD` to see what was modified
+      2. **Analyze the changes carefully**: Identify EXACTLY what changed (version number, dependency, configuration value)
+      3. **Determine the verification approach**: Based on the change type, decide how to verify it
+      4. **Extract the specific values**: Note the NEW value that should be present in the current files
+      5. **Setup Gradle TestKit dependency**: Add the following to the root `build.gradle` file:
+         ```groovy
+         dependencies {
+             testImplementation gradleTestKit()
+             testImplementation 'org.junit.jupiter:junit-jupiter:5.9.3'
+             testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+         }
+
+         test {
+             useJUnitPlatform()
+             systemProperty 'sample.buildFile', file('path/to/target/build.gradle').absolutePath
+         }
+         ```
+         Replace `'path/to/target/build.gradle'` with the actual path to the build file that was modified.
+
+         Or for Kotlin DSL (`build.gradle.kts`):
+         ```kotlin
+         dependencies {
+             testImplementation(gradleTestKit())
+             testImplementation("org.junit.jupiter:junit-jupiter:5.9.3")
+             testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+         }
+
+         tasks.test {
+             useJUnitPlatform()
+             systemProperty("sample.buildFile", file("path/to/target/build.gradle.kts").absolutePath)
+         }
+         ```
+         Replace `"path/to/target/build.gradle.kts"` with the actual path to the build file that was modified.
+      6. **Create the test file**: Write `BuildScriptTest.java` in `/src/test/java/`
+      7. **Verify your logic**: Ensure the test PASSES with the current changes
+      8. **Test your solution**: Run `./gradlew :clean :test --tests BuildScriptTest` to verify the test executes correctly.
+      9. **Submit**: Use the submit command to finalize
+
+      ## Example Analysis
+
+      If `git diff HEAD~1` shows:
+      ```diff
+      -mockito_core = "5.20.0"
+      +mockito_core = "5.21.0"
+      ```
+
+      Your test should:
+      - Assert that the file contains `"5.21.0"` (PASSES with current changes)
+      - This verifies the version was updated correctly
+
+      Remember: The test runs against the build file specified by `sample.buildFile` system property. Your assertions must be specific to the exact change you discovered using git.
+    next_step_template: |-
+      OBSERVATION:
+      {{observation}}
+    next_step_no_output_template: |-
+      Your command ran successfully and did not produce any output.
+  tools:
+    env_variables:
+      PAGER: cat
+      MANPAGER: cat
+      LESS: -R
+      PIP_PROGRESS_BAR: 'off'
+      TQDM_DISABLE: '1'
+      GIT_PAGER: cat
+    bundles:
+      - path: tools/registry
+      - path: tools/edit_anthropic
+      - path: tools/review_on_submit_m
+    registry_variables:
+      USE_FILEMAP: 'true'
+      SUBMIT_REVIEW_MESSAGES:
+        - |
+          Thank you for your work on this issue. Please carefully follow the steps below to help review your changes.
+
+          1. If you made any changes to your code after running the reproduction script, please run the reproduction script again.
+            If the reproduction script is failing, please revisit your changes and make sure they are correct.
+            If you have already removed your reproduction script, please ignore this step.
+          2. Remove your reproduction script (if you haven't done so already).
+          3. If you have modified any TEST files, please revert them to the state they had before you started fixing the issue.
+            You can do this with `git checkout -- /path/to/test/file.py`. Use below <diff> to find the files you need to revert.
+          4. Run the submit command again to confirm.
+
+          Here is a list of all of your changes:
+
+          <diff>
+          {{diff}}
+          </diff>
+    execution_timeout: 300
+    enable_bash_tool: true
+    parse_function:
+      type: function_calling

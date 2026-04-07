@@ -12,6 +12,8 @@ If no file is specified, defaults to 'data/gradle_dataset_verified.json'.
 If no model is specified, defaults to 'claude-sonnet-4-6'.
 """
 
+import json
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +23,43 @@ def run(cmd: list[str], cwd: Path) -> None:
     result = subprocess.run(cmd, cwd=cwd)
     if result.returncode != 0:
         sys.exit(result.returncode)
+
+
+def _docker_image_exists(image: str) -> bool:
+    return (
+        subprocess.run(
+            ["docker", "inspect", image],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode
+        == 0
+    )
+
+
+def resolve_arch(json_path: Path) -> None:
+    """Replace {arch} placeholders by probing Docker for the actual image architecture."""
+    host_arch = platform.machine()
+    # Normalize: Linux ARM reports "aarch64" but Docker image tags use "arm64"
+    if host_arch == "aarch64":
+        host_arch = "arm64"
+    candidates = [host_arch, "x86_64"] if host_arch != "x86_64" else [host_arch, "arm64"]
+
+    with open(json_path) as f:
+        instances = json.load(f)
+    for instance in instances:
+        if "{arch}" not in instance.get("image_name", ""):
+            continue
+        for arch in candidates:
+            candidate = instance["image_name"].replace("{arch}", arch)
+            if _docker_image_exists(candidate):
+                instance["image_name"] = candidate
+                print(f"  {instance['instance_id']:50s} → {arch}")
+                break
+        else:
+            instance["image_name"] = instance["image_name"].replace("{arch}", host_arch)
+            print(f"  {instance['instance_id']:50s} → {host_arch} (no image found)")
+    with open(json_path, "w") as f:
+        json.dump(instances, f, indent=2)
 
 
 def main() -> None:
@@ -35,6 +74,9 @@ def main() -> None:
         [sys.executable, "preprocess_dataset.py", dataset_file],
         cwd=script_dir,
     )
+
+    print("\n=== Step 1b: Resolving image architecture ===")
+    resolve_arch(script_dir / dataset_file)
 
     print("\n=== Step 2: Generating test patches with SWE-agent ===")
     run(

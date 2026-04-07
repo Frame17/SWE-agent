@@ -17,7 +17,7 @@ python run_pipeline.py [json_file] [model_name]
 ```
 
 - `json_file` — dataset filename inside `data/` (default: `gradle_dataset_verified.json`)
-- `model_name` — LLM model to use for test generation (default: `claude-sonnet-4-6`)
+- `model_name` — LLM model to use for test generation (default: `claude-sonnet-4-6`). Accepts any model supported by [litellm](https://docs.litellm.ai/docs/providers) (e.g. `claude-opus-4-6`, `gpt-4o`, `gemini/gemini-2.5-flash`). Requires the corresponding API key in the environment (e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`).
 
 Example:
 
@@ -31,24 +31,28 @@ python run_pipeline.py gradle_dataset_verified_sample.json claude-opus-4-6
 
 ### 1. Prepare — `preprocess_dataset.py`
 
-**Input:** a raw JSON dataset (list of SWE-bench instances) in `data/`.  
+**Input:** a raw JSON dataset (list of SWE-bench instances) in `data/`.
 **Output:** the same file updated in-place.
 
 Adds two fields that SWE-agent requires but are absent from the raw export:
 
 | Field | Value |
 |---|---|
-| `image_name` | Docker image tag derived from `instance_id` |
+| `image_name` | Docker image tag derived from `instance_id`, with `{arch}` placeholder |
 | `repo_name` | Fixed to `testbed` (the in-container checkout path) |
 
 Also ensures every `patch` value ends with a newline, as required by the patch-apply tooling.
+
+The `image_name` uses a literal `{arch}` placeholder (e.g. `sweb.eval.{arch}.aliucord__aliucord-556:latest`) so the dataset remains portable across architectures. The placeholder is resolved at runtime by probing Docker for the actual image — the host architecture is tried first, then the alternative (`x86_64` on ARM hosts, `arm64` on x86 hosts). This handles repos that force a specific architecture (e.g. projects using older Kotlin/Native versions that only ship x86_64 binaries).
 
 ---
 
 ### 2. Generate — `agent_generate_tests.sh`
 
-**Input:** the preprocessed dataset produced in stage 1.  
+**Input:** the preprocessed dataset produced in stage 1.
 **Output:** a `preds.json` file written to the trajectory directory under `trajectories/`.
+
+Before launching the agent, resolves any `{arch}` placeholders in `image_name` fields by probing Docker for the locally available image.
 
 Runs `sweagent.run.run_batch` using the `gradle_test_generation` config. The agent is given each issue and asked to write a test that reproduces it. Results (one patch file per instance) are accumulated in a trajectory directory and summarised in `preds.json`.
 
@@ -56,7 +60,7 @@ Runs `sweagent.run.run_batch` using the `gradle_test_generation` config. The age
 
 ### 3. Collect — `populate_test_patches.py`
 
-**Input:** the preprocessed dataset and the `preds.json` from stage 2.  
+**Input:** the preprocessed dataset and the `preds.json` from stage 2.
 **Output:** a new JSON file (`data/<stem>_with_test_patch.json`) containing only the instances for which the agent produced a non-empty test patch.
 
 Reads the agent predictions, copies the `model_patch` value into the `test_patch` field of each matching dataset entry, and writes the filtered result to the output file. The `preds.json` is resolved automatically from `trajectories/` by matching the dataset filename stem; the most recently modified match is used.
