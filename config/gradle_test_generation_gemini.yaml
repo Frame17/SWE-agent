@@ -2,6 +2,8 @@
 # Omits cache_control history processor (incompatible with Gemini's CachedContent API)
 agent:
   type: default
+  model:
+    per_instance_cost_limit: 5.0
   templates:
     system_template: |-
       You are an expert in Gradle build systems and test generation. Your task is to generate Gradle Test Kit tests that verify specific build script changes.
@@ -188,7 +190,7 @@ agent:
           <diff>
           {{diff}}
           </diff>
-    execution_timeout: 300
+    execution_timeout: 600
     enable_bash_tool: true
     parse_function:
       type: function_calling
